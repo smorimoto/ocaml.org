@@ -6,7 +6,7 @@ type source = {
   url : string;
   description : string;
   disabled : bool;
-  filter : string
+  filter : string;
 }
 [@@deriving show { with_path = false }]
 
@@ -190,7 +190,14 @@ module External = struct
           | Error (`Msg e) -> (
               match m.source with
               | Some { name; url } ->
-                  { id = ""; name; url; description = ""; disabled = false; filter = "" }
+                  {
+                    id = "";
+                    name;
+                    url;
+                    description = "";
+                    disabled = false;
+                    filter = "";
+                  }
               | None ->
                   failwith
                     (e ^ " and there is no source defined in the markdown file")
@@ -402,13 +409,19 @@ module Scraper = struct
                slug)
       | _, None ->
           print_endline
-            (Printf.sprintf "skipping %s/%s: item does not have a date"
-               feed.id slug)
+            (Printf.sprintf "skipping %s/%s: item does not have a date" feed.id
+               slug)
       | Some url, Some date ->
           if not (Sys.file_exists source_path) then Sys.mkdir source_path 0o775;
           let content = River.content post in
           let description = River.meta_description post in
-          if String.(is_sub_ignore_case feed.filter content || is_sub_ignore_case feed.filter (Option.value ~default:"" description) || is_sub_ignore_case feed.filter title) then
+          if
+            String.(
+              is_sub_ignore_case feed.filter content
+              || is_sub_ignore_case feed.filter
+                   (Option.value ~default:"" description)
+              || is_sub_ignore_case feed.filter title)
+          then (
             let url = String.trim (Uri.to_string url) in
             let preview_image = River.seo_image post in
             let author = River.author post in
@@ -428,11 +441,11 @@ module Scraper = struct
             in
             let oc = open_out output_file in
             Printf.fprintf oc "%s" s;
-            close_out oc
+            close_out oc)
           else
             print_endline
-            (Printf.sprintf "skipping %s/%s: item does not match filter %s"
-               feed.id slug feed.filter)
+              (Printf.sprintf "skipping %s/%s: item does not match filter %s"
+                 feed.id slug feed.filter)
 
   let scrape_feed (feed, (name : River.feed)) =
     let posts = River.posts [ name ] in
