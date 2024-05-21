@@ -387,17 +387,11 @@ module GlobalFeed = struct
 end
 
 module Scraper = struct
-  let fetch_feed feed =
-    try Some (feed, River.fetch { name = feed.name; url = feed.url })
-    with e ->
-      print_endline
-        (Printf.sprintf "failed to scrape %s: %s" feed.id (Printexc.to_string e));
-      None
 
-  let scrape_post ~feed (post : River.post) =
+  let scrape_post ~source (post : River.post) =
     let title = River.title post in
     let slug = Utils.slugify title in
-    let source_path = "data/planet/" ^ feed.id in
+    let source_path = "data/planet/" ^ source.id in
     let output_file = source_path ^ "/" ^ slug ^ ".md" in
     if not (Sys.file_exists output_file) then
       let url = River.link post in
@@ -405,11 +399,11 @@ module Scraper = struct
       match (url, date) with
       | None, _ ->
           print_endline
-            (Printf.sprintf "skipping %s/%s: item does not have a url" feed.id
+            (Printf.sprintf "skipping %s/%s: item does not have a url" source.id
                slug)
       | _, None ->
           print_endline
-            (Printf.sprintf "skipping %s/%s: item does not have a date" feed.id
+            (Printf.sprintf "skipping %s/%s: item does not have a date" source.id
                slug)
       | Some url, Some date ->
           if not (Sys.file_exists source_path) then Sys.mkdir source_path 0o775;
@@ -417,10 +411,10 @@ module Scraper = struct
           let description = River.meta_description post in
           if
             String.(
-              is_sub_ignore_case feed.filter content
-              || is_sub_ignore_case feed.filter
+              is_sub_ignore_case source.filter content
+              || is_sub_ignore_case source.filter
                    (Option.value ~default:"" description)
-              || is_sub_ignore_case feed.filter title)
+              || is_sub_ignore_case source.filter title)
           then (
             let url = String.trim (Uri.to_string url) in
             let preview_image = River.seo_image post in
@@ -445,15 +439,16 @@ module Scraper = struct
           else
             print_endline
               (Printf.sprintf "skipping %s/%s: item does not match filter %s"
-                 feed.id slug feed.filter)
+                 source.id slug source.filter)
 
-  let scrape_feed (feed, (name : River.feed)) =
-    let posts = River.posts [ name ] in
-    posts |> List.iter (scrape_post ~feed)
+  let scrape_source source =
+    try [ River.fetch { name = source.name; url = source.url } ] |> River.posts |> List.iter (scrape_post ~source)
+    with e -> print_endline
+    (Printf.sprintf "failed to scrape %s: %s" source.id (Printexc.to_string e))
 
   let scrape () =
     let sources = External.Source.all () in
     sources
     |> List.filter (fun ({ disabled; _ } : source) -> not disabled)
-    |> List.filter_map fetch_feed |> List.iter scrape_feed
+    |> List.iter scrape_source
 end
