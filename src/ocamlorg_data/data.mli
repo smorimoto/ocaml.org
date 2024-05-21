@@ -352,6 +352,7 @@ module Planet : sig
     url : string;
     description : string;
     disabled : bool;
+    filter : string;
   }
 
   module Post : sig

@@ -6,6 +6,7 @@ type source = {
   url : string;
   description : string;
   disabled : bool;
+  filter : string
 }
 [@@deriving show { with_path = false }]
 
@@ -53,6 +54,7 @@ module Local = struct
                    url = "https://ocaml.org/blog/" ^ s.id;
                    description = s.description;
                    disabled = false;
+                   filter = "";
                  }))
       in
       result
@@ -131,6 +133,7 @@ module External = struct
       name : string;
       url : string;
       disabled : bool option;
+      filter : string option;
     }
     [@@deriving yaml]
 
@@ -146,13 +149,14 @@ module External = struct
         in
         Ok
           (sources
-          |> List.map (fun { id; name; url; disabled } ->
+          |> List.map (fun { id; name; url; disabled; filter } ->
                  {
                    id;
                    name;
                    url;
                    description = "";
                    disabled = Option.value ~default:false disabled;
+                   filter = Option.value ~default:"" filter;
                  }))
       in
       result
@@ -186,7 +190,7 @@ module External = struct
           | Error (`Msg e) -> (
               match m.source with
               | Some { name; url } ->
-                  { id = ""; name; url; description = ""; disabled = false }
+                  { id = ""; name; url; description = ""; disabled = false; filter = "" }
               | None ->
                   failwith
                     (e ^ " and there is no source defined in the markdown file")
@@ -292,7 +296,7 @@ let all () =
 let template () =
   Format.asprintf
     {|
-type source = { id : string; name : string; url : string ; description : string; disabled : bool }
+type source = { id : string; name : string; url : string ; description : string; disabled : bool; filter : string }
 
 module Post = struct
   type t =
@@ -376,17 +380,17 @@ module GlobalFeed = struct
 end
 
 module Scraper = struct
-  let fetch_feed (id, source) =
-    try Some (id, River.fetch source)
+  let fetch_feed feed =
+    try Some (feed, River.fetch { name = feed.name; url = feed.url })
     with e ->
       print_endline
-        (Printf.sprintf "failed to scrape %s: %s" id (Printexc.to_string e));
+        (Printf.sprintf "failed to scrape %s: %s" feed.id (Printexc.to_string e));
       None
 
-  let scrape_post ~source_id (post : River.post) =
+  let scrape_post ~feed (post : River.post) =
     let title = River.title post in
     let slug = Utils.slugify title in
-    let source_path = "data/planet/" ^ source_id in
+    let source_path = "data/planet/" ^ feed.id in
     let output_file = source_path ^ "/" ^ slug ^ ".md" in
     if not (Sys.file_exists output_file) then
       let url = River.link post in
@@ -394,50 +398,49 @@ module Scraper = struct
       match (url, date) with
       | None, _ ->
           print_endline
-            (Printf.sprintf "skipping %s/%s: item does not have a url" source_id
+            (Printf.sprintf "skipping %s/%s: item does not have a url" feed.id
                slug)
       | _, None ->
           print_endline
             (Printf.sprintf "skipping %s/%s: item does not have a date"
-               source_id slug)
+               feed.id slug)
       | Some url, Some date ->
           if not (Sys.file_exists source_path) then Sys.mkdir source_path 0o775;
-          let oc = open_out output_file in
           let content = River.content post in
-          let url = String.trim (Uri.to_string url) in
-          let preview_image = River.seo_image post in
           let description = River.meta_description post in
-          let author = River.author post in
-          let metadata : External.Post.metadata =
-            {
-              title;
-              url;
-              date;
-              preview_image;
-              description;
-              authors = Some [ author ];
-              source = None;
-            }
-          in
-          let s =
-            Format.asprintf "%a\n%s\n" External.Post.pp_meta metadata content
-          in
-          Printf.fprintf oc "%s" s;
-          close_out oc
+          if String.(is_sub_ignore_case feed.filter content || is_sub_ignore_case feed.filter (Option.value ~default:"" description) || is_sub_ignore_case feed.filter title) then
+            let url = String.trim (Uri.to_string url) in
+            let preview_image = River.seo_image post in
+            let author = River.author post in
+            let metadata : External.Post.metadata =
+              {
+                title;
+                url;
+                date;
+                preview_image;
+                description;
+                authors = Some [ author ];
+                source = None;
+              }
+            in
+            let s =
+              Format.asprintf "%a\n%s\n" External.Post.pp_meta metadata content
+            in
+            let oc = open_out output_file in
+            Printf.fprintf oc "%s" s;
+            close_out oc
+          else
+            print_endline
+            (Printf.sprintf "skipping %s/%s: item does not match filter %s"
+               feed.id slug feed.filter)
 
-  let scrape_feed (id, (feed : River.feed)) =
-    let posts = River.posts [ feed ] in
-    posts |> List.iter (scrape_post ~source_id:id)
+  let scrape_feed (feed, (name : River.feed)) =
+    let posts = River.posts [ name ] in
+    posts |> List.iter (scrape_post ~feed)
 
   let scrape () =
     let sources = External.Source.all () in
     sources
     |> List.filter (fun ({ disabled; _ } : source) -> not disabled)
-    |> List.map
-         (fun
-           ({ id; url; name; description = _; disabled = _ } : source)
-           :
-           (string * River.source)
-         -> (id, { name; url }))
     |> List.filter_map fetch_feed |> List.iter scrape_feed
 end
