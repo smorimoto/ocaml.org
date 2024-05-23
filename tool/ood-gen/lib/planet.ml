@@ -387,7 +387,6 @@ module GlobalFeed = struct
 end
 
 module Scraper = struct
-
   let scrape_post ~source (post : River.post) =
     let title = River.title post in
     let slug = Utils.slugify title in
@@ -403,19 +402,19 @@ module Scraper = struct
                slug)
       | _, None ->
           print_endline
-            (Printf.sprintf "skipping %s/%s: item does not have a date" source.id
-               slug)
+            (Printf.sprintf "skipping %s/%s: item does not have a date"
+               source.id slug)
       | Some url, Some date ->
           if not (Sys.file_exists source_path) then Sys.mkdir source_path 0o775;
           let content = River.content post in
           let description = River.meta_description post in
           if
-            not source.only_ocaml ||
-            String.(
-              is_sub_ignore_case "ocaml" content
-              || is_sub_ignore_case "ocaml"
-                   (Option.value ~default:"" description)
-              || is_sub_ignore_case "ocaml" title)
+            (not source.only_ocaml)
+            || String.(
+                 is_sub_ignore_case "ocaml" content
+                 || is_sub_ignore_case "ocaml"
+                      (Option.value ~default:"" description)
+                 || is_sub_ignore_case "ocaml" title)
           then (
             let url = String.trim (Uri.to_string url) in
             let preview_image = River.seo_image post in
@@ -439,13 +438,19 @@ module Scraper = struct
             close_out oc)
           else
             print_endline
-              (Printf.sprintf "skipping %s/%s: item does not contain ocaml keyword"
-                 source.id slug)
+              (Printf.sprintf
+                 "skipping %s/%s: item does not contain ocaml keyword" source.id
+                 slug)
 
   let scrape_source source =
-    try [ River.fetch { name = source.name; url = source.url } ] |> River.posts |> List.iter (scrape_post ~source)
-    with e -> print_endline
-    (Printf.sprintf "failed to scrape %s: %s" source.id (Printexc.to_string e))
+    try
+      [ River.fetch { name = source.name; url = source.url } ]
+      |> River.posts
+      |> List.iter (scrape_post ~source)
+    with e ->
+      print_endline
+        (Printf.sprintf "failed to scrape %s: %s" source.id
+           (Printexc.to_string e))
 
   let scrape () =
     let sources = External.Source.all () in
