@@ -410,7 +410,7 @@ module Scraper = struct
           let content = River.content post in
           let description = River.meta_description post in
           if
-            source.only_ocaml &&
+            not source.only_ocaml ||
             String.(
               is_sub_ignore_case "ocaml" content
               || is_sub_ignore_case "ocaml"
