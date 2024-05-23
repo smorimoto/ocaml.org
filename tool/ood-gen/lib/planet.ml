@@ -6,7 +6,7 @@ type source = {
   url : string;
   description : string;
   disabled : bool;
-  filter : string;
+  only_ocaml : bool;
 }
 [@@deriving show { with_path = false }]
 
@@ -54,7 +54,7 @@ module Local = struct
                    url = "https://ocaml.org/blog/" ^ s.id;
                    description = s.description;
                    disabled = false;
-                   filter = "";
+                   only_ocaml = false;
                  }))
       in
       result
@@ -133,7 +133,7 @@ module External = struct
       name : string;
       url : string;
       disabled : bool option;
-      filter : string option;
+      only_ocaml : bool option;
     }
     [@@deriving yaml]
 
@@ -149,14 +149,14 @@ module External = struct
         in
         Ok
           (sources
-          |> List.map (fun { id; name; url; disabled; filter } ->
+          |> List.map (fun { id; name; url; disabled; only_ocaml } ->
                  {
                    id;
                    name;
                    url;
                    description = "";
                    disabled = Option.value ~default:false disabled;
-                   filter = Option.value ~default:"" filter;
+                   only_ocaml = Option.value ~default:false only_ocaml;
                  }))
       in
       result
@@ -196,7 +196,7 @@ module External = struct
                     url;
                     description = "";
                     disabled = false;
-                    filter = "";
+                    only_ocaml = false;
                   }
               | None ->
                   failwith
@@ -303,7 +303,7 @@ let all () =
 let template () =
   Format.asprintf
     {|
-type source = { id : string; name : string; url : string ; description : string; disabled : bool; filter : string }
+type source = { id : string; name : string; url : string ; description : string; disabled : bool; only_ocaml : bool }
 
 module Post = struct
   type t =
@@ -410,11 +410,12 @@ module Scraper = struct
           let content = River.content post in
           let description = River.meta_description post in
           if
+            source.only_ocaml &&
             String.(
-              is_sub_ignore_case source.filter content
-              || is_sub_ignore_case source.filter
+              is_sub_ignore_case "ocaml" content
+              || is_sub_ignore_case "ocaml"
                    (Option.value ~default:"" description)
-              || is_sub_ignore_case source.filter title)
+              || is_sub_ignore_case "ocaml" title)
           then (
             let url = String.trim (Uri.to_string url) in
             let preview_image = River.seo_image post in
@@ -438,8 +439,8 @@ module Scraper = struct
             close_out oc)
           else
             print_endline
-              (Printf.sprintf "skipping %s/%s: item does not match filter %s"
-                 source.id slug source.filter)
+              (Printf.sprintf "skipping %s/%s: item does not contain ocaml keyword"
+                 source.id slug)
 
   let scrape_source source =
     try [ River.fetch { name = source.name; url = source.url } ] |> River.posts |> List.iter (scrape_post ~source)

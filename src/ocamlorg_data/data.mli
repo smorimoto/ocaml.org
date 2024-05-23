@@ -352,7 +352,7 @@ module Planet : sig
     url : string;
     description : string;
     disabled : bool;
-    filter : string;
+    only_ocaml : bool;
   }
 
   module Post : sig
