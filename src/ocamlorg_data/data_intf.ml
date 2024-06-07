@@ -71,3 +71,18 @@ module Outreachy = struct
 
   type t = { name : string; projects : project list } [@@deriving of_yaml, show]
 end
+
+module Youtube = struct
+  type t = {
+    title : string;
+    content : string;
+    thumbnail : string;
+    description : string;
+    published : string;
+    author_name : string;
+    author_uri : string;
+    source_link : string;
+    source_title : string;
+  }
+  [@@deriving yaml, show]
+end
